@@ -1,6 +1,6 @@
 services:
   nodejs-app:
-    image: nodejsimage  
+    image: jathikareem/nodejsimage:latest  
     ports:
       - "3001-3002:3000"
     deploy:
