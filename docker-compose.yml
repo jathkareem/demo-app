@@ -1,0 +1,9 @@
+services:
+  nodejs-app:
+    image: nodejsimage  
+    ports:
+      - "3001-3002:3000"
+    deploy:
+      replicas: 2
+      restart_policy:
+        condition: on-failure
