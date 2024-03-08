@@ -1,0 +1,82 @@
+pipeline {
+    agent {
+        label 'docker'
+    }
+
+    environment {
+        DOCKER_FILE = 'dockerfile'
+        DOCKER_HUB_CREDENTIALS = credentials('DockerHubCreds')
+        DOCKER_IMAGE_NAME = 'jathikareem/nodejsimage'
+        DOCKER_IMAGE_TAG = 'latest'
+        EMAIL_RECIPIENT = 'jathkareem@gmail.com'
+    }
+
+    stages {
+        stage('Code Checkout') {
+            steps {
+                checkout([$class: 'GitSCM', branches: [[name: 'main']], userRemoteConfigs: [[url: 'https://github.com/jathkareem/demo-app.git']]])
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                script {
+                    docker.build("${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}", "--file=$WORKSPACE/${DOCKER_FILE} .")
+                }
+            }
+        }
+
+        stage('Push to Docker Hub') {
+            steps {
+                script {
+                    docker.withRegistry('https://registry.hub.docker.com', 'DockerHubCreds') {
+                        docker.image("${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}").push()
+                    }
+                }
+            }
+        }
+
+        stage('Stop Containers') {
+            steps {
+                script {
+                    def isContainersRunning = sh(script: 'docker ps -q', returnStdout: true).trim()
+
+                    if (isContainersRunning) {
+                        echo 'Stopping Docker containers...'
+                        sh 'docker-compose down'
+                    } else {
+                        echo 'No Docker containers are currently running.'
+                    }
+                }
+            }
+        }
+
+        stage('Deploy to Application Server') {
+            steps {
+                script {
+                    try {
+                        sh 'docker-compose -f docker-compose.yml up -d'
+                    } catch (Exception e) {
+                        currentBuild.result = 'FAILURE'
+                        error("Deployment failed: ${e.message}")
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo 'Job succeeded! Sending success notification...'
+            emailext subject: 'jenkins Pipeline Success',
+                      body: 'The Jenkins pipeline has succeeded.',
+                      to: "${EMAIL_RECIPIENT}"
+        }
+        failure {
+            echo 'Job failed! Sending failure notification...'
+            emailext subject: 'Jenkins Pipeline Failure',
+                      body: 'The Jenkins pipeline has failed. Please check the build logs for details.',
+                      to: "${EMAIL_RECIPIENT}"
+        }
+    }
+}
